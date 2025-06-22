@@ -16,12 +16,12 @@ st.markdown("Quickly check if your favourite hawker centre is closed due to clea
 @st.cache_data
 def load_data():
     df = pd.read_csv("DatesofHawkerCentresClosure.csv")
-    # Parse dates
+    # Parse dates in DDMMYYYY format
     for q in ['q1', 'q2', 'q3', 'q4']:
-        df[f'{q}_cleaningstartdate'] = pd.to_datetime(df[f'{q}_cleaningstartdate'], errors='coerce')
-        df[f'{q}_cleaningenddate'] = pd.to_datetime(df[f'{q}_cleaningenddate'], errors='coerce')
-    df['other_works_startdate'] = pd.to_datetime(df['other_works_startdate'], errors='coerce')
-    df['other_works_enddate'] = pd.to_datetime(df['other_works_enddate'], errors='coerce')
+        df[f'{q}_cleaningstartdate'] = pd.to_datetime(df[f'{q}_cleaningstartdate'].where(~df[f'{q}_cleaningstartdate'].astype(str).str.contains("TBC", na=False)), format='%d%m%Y', errors='coerce')
+        df[f'{q}_cleaningenddate'] = pd.to_datetime(df[f'{q}_cleaningenddate'].where(~df[f'{q}_cleaningenddate'].astype(str).str.contains("TBC", na=False)), format='%d%m%Y', errors='coerce')
+    df['other_works_startdate'] = pd.to_datetime(df['other_works_startdate'].where(~df['other_works_startdate'].astype(str).str.contains("TBC", na=False)), format='%d%m%Y', errors='coerce')
+    df['other_works_enddate'] = pd.to_datetime(df['other_works_enddate'].where(~df['other_works_enddate'].astype(str).str.contains("TBC", na=False)), format='%d%m%Y', errors='coerce')
     return df
 
 df = load_data()
@@ -55,22 +55,36 @@ if pd.notna(selected_row['other_works_startdate']) and pd.notna(selected_row['ot
 # Convert closures to DataFrame
 closure_df = pd.DataFrame(closures)
 
-# Status message
-closed_today = closure_df[
-    (closure_df['start'].dt.date <= today) & (closure_df['end'].dt.date >= today)
-]
+# Diagnostic feedback for missing or TBC closure dates
+if closure_df.empty:
+    st.warning("⚠️ This hawker centre has no confirmed closure dates available.")
+elif closure_df['start'].isna().all() or closure_df['end'].isna().all():
+    st.warning("⚠️ All closure periods for this hawker centre are marked as TBC or incomplete.")
 
-if not closed_today.empty:
-    st.error("🔦 Alamak! This hawker centre is CLOSED today.")
-    st.dataframe(closed_today)
+# Status message
+if not closure_df.empty and 'start' in closure_df.columns and 'end' in closure_df.columns:
+    closed_today = closure_df[
+        (closure_df['start'].dt.date <= today) & (closure_df['end'].dt.date >= today)
+    ]
+    if not closed_today.empty:
+        st.error("🔦 Alamak! This hawker centre is CLOSED today.")
+        st.dataframe(closed_today.style.applymap(lambda x: 'background-color: yellow' if isinstance(x, str) and 'TBC' in x else ''))
+    else:
+        st.success("✅ Steady lah! This hawker centre is OPEN today. Go makan!")
 else:
     st.success("✅ Steady lah! This hawker centre is OPEN today. Go makan!")
 
 # Upcoming closures
-upcoming = closure_df[closure_df['start'].dt.date > today]
-if not upcoming.empty:
-    st.info("🗓️ Upcoming closures:")
-    st.dataframe(upcoming)
+if not closure_df.empty and 'start' in closure_df.columns and 'end' in closure_df.columns:
+    upcoming = closure_df[closure_df['start'].dt.date > today]
+    if not upcoming.empty:
+        st.info("🗓️ Upcoming closures:")
+        st.dataframe(upcoming.style.applymap(lambda x: 'background-color: yellow' if isinstance(x, str) and 'TBC' in x else ''))
+    else:
+        st.success("✅ No upcoming closures. Go ahead and plan your makan trips!")
+else:
+    upcoming = pd.DataFrame()
+    st.info("ℹ️ No closure data available for this hawker centre.")
 
 # Favourites
 if 'favourites' not in st.session_state:
@@ -129,24 +143,27 @@ else:
 # Map of all hawker centres
 st.subheader("🌍 Map View")
 
-# Optional: use browser geolocation via JS (copy-paste into inputs)
-st.markdown("### 📌 Use My Location")
-with st.expander("Click to detect your location using browser (copy into inputs below)"):
+# Optional: use browser geolocation via JS (auto add user location to map)
+user_lat = 1.3521
+user_lon = 103.8198
+
+with st.expander("📌 Click to allow browser to detect your location"):
     components.html("""
     <script>
     navigator.geolocation.getCurrentPosition(function(position) {
         const lat = position.coords.latitude;
         const lon = position.coords.longitude;
-        document.body.innerHTML += `<p><b>Latitude:</b> ${lat}<br><b>Longitude:</b> ${lon}</p>`;
+        const streamlitDoc = window.parent.document;
+        streamlitDoc.querySelector('input[aria-label="Enter your latitude"]').value = lat;
+        streamlitDoc.querySelector('input[aria-label="Enter your longitude"]').value = lon;
     });
     </script>
     """, height=100)
 
-# Manual input fallback
-user_lat = st.number_input("Enter your latitude", value=1.3521, format="%.6f")
-user_lon = st.number_input("Enter your longitude", value=103.8198, format="%.6f")
+user_lat = st.number_input("Enter your latitude", value=user_lat, format="%.6f")
+user_lon = st.number_input("Enter your longitude", value=user_lon, format="%.6f")
 
-m = folium.Map(location=[1.35, 103.82], zoom_start=12)
+m = folium.Map(location=[user_lat, user_lon], zoom_start=12)
 
 # Add user location
 folium.Marker(
