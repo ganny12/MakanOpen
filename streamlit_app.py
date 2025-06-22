@@ -16,6 +16,7 @@ st.markdown("Quickly check if your favourite hawker centre is closed due to clea
 @st.cache_data
 def load_data():
     df = pd.read_csv("DatesofHawkerCentresClosure.csv")
+    df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')  # Normalize column names
     # Parse dates in DDMMYYYY format
     for q in ['q1', 'q2', 'q3', 'q4']:
         df[f'{q}_cleaningstartdate'] = pd.to_datetime(df[f'{q}_cleaningstartdate'].where(~df[f'{q}_cleaningstartdate'].astype(str).str.contains("TBC", na=False)), format='%d%m%Y', errors='coerce')
@@ -32,6 +33,9 @@ centres = sorted(df['name'].unique())
 selected = st.selectbox("Choose your hawker centre", centres)
 
 # Filter selected centre data
+st.write("🔍 Sample of loaded data for debugging:")
+st.dataframe(df[['name', 'q1_cleaningstartdate', 'q1_cleaningenddate']].head(10))
+
 selected_row = df[df['name'] == selected].iloc[0]
 
 # Combine all closure periods
