@@ -5,6 +5,7 @@ import folium
 from streamlit_folium import st_folium
 from ics import Calendar, Event
 from geopy.distance import geodesic
+import streamlit.components.v1 as components
 
 # Page setup
 st.set_page_config(page_title="Hawker Centre Open or Not? 🇸🇬", layout="wide")
@@ -60,27 +61,27 @@ closed_today = closure_df[
 ]
 
 if not closed_today.empty:
-    st.error("\ud83d\udd26 Alamak! This hawker centre is CLOSED today.")
+    st.error("🔦 Alamak! This hawker centre is CLOSED today.")
     st.dataframe(closed_today)
 else:
-    st.success("\u2705 Steady lah! This hawker centre is OPEN today. Go makan!")
+    st.success("✅ Steady lah! This hawker centre is OPEN today. Go makan!")
 
 # Upcoming closures
 upcoming = closure_df[closure_df['start'].dt.date > today]
 if not upcoming.empty:
-    st.info("\ud83d\uddd3\ufe0f Upcoming closures:")
+    st.info("🗓️ Upcoming closures:")
     st.dataframe(upcoming)
 
 # Favourites
 if 'favourites' not in st.session_state:
     st.session_state['favourites'] = []
 
-if st.button("\u2b50 Add to Favourites"):
+if st.button("⭐ Add to Favourites"):
     if selected not in st.session_state['favourites']:
         st.session_state['favourites'].append(selected)
 
 if st.session_state['favourites']:
-    st.sidebar.subheader("\ud83d\udcc6 Your Favourites")
+    st.sidebar.subheader("📆 Your Favourites")
     for fav in st.session_state['favourites']:
         st.sidebar.write(fav)
 
@@ -94,10 +95,10 @@ if not upcoming.empty:
         event.end = row['end']
         event.description = row['remarks']
         cal.events.add(event)
-    st.download_button("\ud83d\udcc5 Export closures to calendar", cal.serialize(), "hawker_closures.ics")
+    st.download_button("📅 Export closures to calendar", cal.serialize(), "hawker_closures.ics")
 
 # Suggest nearby open centres
-st.subheader("\ud83d\udccd Nearby Open Centres")
+st.subheader("📍 Nearby Open Centres")
 
 lat, lon = selected_row['latitude_hc'], selected_row['longitude_hc']
 
@@ -126,9 +127,35 @@ else:
     st.info("No nearby centres found within 2km that are open today.")
 
 # Map of all hawker centres
-st.subheader("\ud83c\udf0d Map View")
+st.subheader("🌍 Map View")
+
+# Optional: use browser geolocation via JS (copy-paste into inputs)
+st.markdown("### 📌 Use My Location")
+with st.expander("Click to detect your location using browser (copy into inputs below)"):
+    components.html("""
+    <script>
+    navigator.geolocation.getCurrentPosition(function(position) {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        document.body.innerHTML += `<p><b>Latitude:</b> ${lat}<br><b>Longitude:</b> ${lon}</p>`;
+    });
+    </script>
+    """, height=100)
+
+# Manual input fallback
+user_lat = st.number_input("Enter your latitude", value=1.3521, format="%.6f")
+user_lon = st.number_input("Enter your longitude", value=103.8198, format="%.6f")
+
 m = folium.Map(location=[1.35, 103.82], zoom_start=12)
 
+# Add user location
+folium.Marker(
+    location=[user_lat, user_lon],
+    popup="📍 You are here",
+    icon=folium.Icon(color='blue')
+).add_to(m)
+
+# Add hawker centre markers
 for _, row in df.iterrows():
     marker_closed = not is_open_today(row)
     color = 'red' if marker_closed else 'green'
@@ -142,5 +169,4 @@ st_folium(m, width=700, height=500)
 
 # Footer
 st.markdown("---")
-st.caption("\u00a9 2025 Made for Singaporean food lovers. Data from NEA / Data.gov.sg")
-
+st.caption("© 2025 Made for Singaporean food lovers. Data from NEA / Data.gov.sg")
